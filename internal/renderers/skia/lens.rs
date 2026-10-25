@@ -59,7 +59,7 @@ half4 main(float2 p) {
         + 0.8 * t4 * pow(lit, 24.0));
     // Just inside the gloss, where thick glass turns the light away, a dark line.
     float dark = (t - 0.7) / 0.11;
-    c.rgb *= half(1.0 - 0.5 * edge_light * exp(-dark * dark));
+    c.rgb *= half(max(1.0 - 0.5 * edge_light * exp(-dark * dark), 0.0));
     c.rgb = min(c.rgb + half3(light) * c.a, c.aaa);
     return c;
 }
