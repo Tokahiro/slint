@@ -82,8 +82,9 @@ impl WGPUSurface {
         // On iOS a window has no size until UIKit attaches it to a scene,
         // and wgpu rejects a zero-sized configure.
         // Start at 1x1; `resize_event` applies the real size.
+        let (width, height) = surface_extent(device, size);
         let mut surface_config = surface
-            .get_default_config(adapter, size.width.max(1), size.height.max(1))
+            .get_default_config(adapter, width, height)
             .ok_or_else(|| PlatformError::from("WGPU surface is not compatible with adapter"))?;
 
         let swapchain_capabilities = surface.get_capabilities(adapter);
@@ -364,7 +365,8 @@ impl crate::Surface for WGPUSurface {
 
         // Skip reconfigure if size hasn't changed — DRM/KMS surfaces don't
         // support being reconfigured.
-        if surface_config.width == size.width && surface_config.height == size.height {
+        let (width, height) = surface_extent(&self.wgpu.device, size);
+        if surface_config.width == width && surface_config.height == height {
             return Ok(());
         }
 
@@ -375,8 +377,8 @@ impl crate::Surface for WGPUSurface {
             gr_context.flush_submit_and_sync_cpu();
         }
 
-        surface_config.width = size.width;
-        surface_config.height = size.height;
+        surface_config.width = width;
+        surface_config.height = height;
 
         surface.configure(&self.wgpu.device, surface_config);
         Ok(())
@@ -536,6 +538,15 @@ impl crate::Surface for WGPUSurface {
     fn free_gpu_resources(&self) {
         self.gr_context.borrow_mut().free_gpu_resources();
     }
+}
+
+/// The size to configure the surface with for a window of `size`: at least 1x1, and at most the
+/// device's largest texture. wgpu rejects a surface beyond that limit, and a window can exceed it:
+/// on Windows another program can size it up to 65535 px with `SetWindowPos`. The part of the
+/// window past the limit stays undrawn.
+fn surface_extent(device: &wgpu::Device, size: PhysicalWindowSize) -> (u32, u32) {
+    let max = device.limits().max_texture_dimension_2d;
+    (size.width.clamp(1, max), size.height.clamp(1, max))
 }
 
 struct WindowAndDisplayHandle(
