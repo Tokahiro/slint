@@ -109,6 +109,13 @@ pub(crate) fn attachment_color_space(encoding: TextureEncoding) -> skia_safe::Co
     }
 }
 
+/// wgpu rejects a surface larger than `max_texture_dimension_2d`,
+/// and on Windows another program can size a window up to 65535 px with `SetWindowPos`.
+#[cfg(any(feature = "wgpu-29", feature = "wgpu-30"))]
+pub(crate) fn surface_extent(size: PhysicalWindowSize, max_dimension: u32) -> (u32, u32) {
+    (size.width.clamp(1, max_dimension), size.height.clamp(1, max_dimension))
+}
+
 /// Returns the color space to give Skia for a texture it samples from.
 ///
 /// Sampling an sRGB texture decodes the transfer function in hardware, so the values that reach
