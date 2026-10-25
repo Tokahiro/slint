@@ -9,9 +9,10 @@ use skia_safe::{ImageFilter, RuntimeEffect, runtime_effect::RuntimeShaderBuilder
 /// `p` is in the rectangle's own coordinates, from its top left corner. At `d` in from the edge
 /// the backdrop shows from further inside, along the edge's normal, by a quarter circle's
 /// profile: `refraction` at the edge, nothing at `bezel` in. Red bends `dispersion` more and blue
-/// as much less. The edge light rises toward the rim as the eighth power of how far toward it a
-/// point lies in the band, a thin gloss at the rim rather than a haze over the bend, strongest
-/// where the edge faces up, fainter where it faces down, faintest at the sides.
+/// as much less. The edge light is lit from the top left: it rises toward the rim as the eighth
+/// power of how far toward it a point lies in the band, a thin gloss at the rim rather than a haze
+/// over the bend, strongest where the edge faces the light, fainter where it faces away, faintest
+/// across it, with a small bright spot, a little wider, where the edge faces the light squarely.
 const SKSL: &str = r#"
 uniform shader backdrop;
 uniform float2 size;
@@ -20,6 +21,9 @@ uniform float refraction;
 uniform float bezel;
 uniform float dispersion;
 uniform float edge_light;
+
+// Where the light comes from: the top left, mostly from above.
+const float2 LIGHT = float2(-0.54, -0.84);
 
 float edge_distance(float2 p) {
     float2 h = size * 0.5;
@@ -45,11 +49,12 @@ half4 main(float2 p) {
         c.r = backdrop.eval(p - bend * (1.0 + dispersion)).r;
         c.b = backdrop.eval(p - bend * (1.0 - dispersion)).b;
     }
-    float up = max(-n.y, 0.0);
-    float down = max(n.y, 0.0);
+    float lit = max(dot(n, LIGHT), 0.0);
+    float away = max(-dot(n, LIGHT), 0.0);
     float t2 = t * t;
     float t4 = t2 * t2;
-    float light = t4 * t4 * edge_light * (0.45 + up * up + 0.6 * down * down);
+    float light = edge_light * (t4 * t4 * (0.25 + 1.1 * lit * lit + 0.35 * away * away)
+        + 0.8 * t4 * pow(lit, 24.0));
     c.rgb = min(c.rgb + half3(light) * c.a, c.aaa);
     return c;
 }
