@@ -773,7 +773,8 @@ fn build(l: &mut Loader) {
         //! ### backdrop-edge-light
         //! <SlintProperty propName="backdrop-edge-light" typeName="float"/>
         //! How strongly the rounded edge brightens toward the rim, most where it faces the top left, as glass reflects more
-        //! light where it is seen at a slant. Zero disables it.
+        //! light where it is seen at a slant, and how dark the line just inside that gloss is, where thick glass turns the
+        //! light away. Zero disables both.
     } }
 
     element! {
