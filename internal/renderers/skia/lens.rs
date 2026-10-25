@@ -9,8 +9,9 @@ use skia_safe::{ImageFilter, RuntimeEffect, runtime_effect::RuntimeShaderBuilder
 /// `p` is in the rectangle's own coordinates, from its top left corner. At `d` in from the edge
 /// the backdrop shows from further inside, along the edge's normal, by a quarter circle's
 /// profile: `refraction` at the edge, nothing at `bezel` in. Red bends `dispersion` more and blue
-/// as much less. The edge light rises toward the rim as the cube of the same profile, strongest
-/// where the edge faces up, fainter where it faces down, faintest at the sides.
+/// as much less. The edge light rises toward the rim as the eighth power of the same profile, a
+/// thin gloss at the rim rather than a haze over the bend, strongest where the edge faces up,
+/// fainter where it faces down, faintest at the sides.
 const SKSL: &str = r#"
 uniform shader backdrop;
 uniform float2 size;
@@ -46,7 +47,9 @@ half4 main(float2 p) {
     }
     float up = max(-n.y, 0.0);
     float down = max(n.y, 0.0);
-    float light = t * t * t * edge_light * (0.45 + up * up + 0.6 * down * down);
+    float t2 = t * t;
+    float t4 = t2 * t2;
+    float light = t4 * t4 * edge_light * (0.45 + up * up + 0.6 * down * down);
     c.rgb = min(c.rgb + half3(light) * c.a, c.aaa);
     return c;
 }
