@@ -12,7 +12,9 @@ use skia_safe::{ImageFilter, RuntimeEffect, runtime_effect::RuntimeShaderBuilder
 /// as much less. The edge light is lit from the top left: it rises toward the rim as the eighth
 /// power of how far toward it a point lies in the band, a thin gloss at the rim rather than a haze
 /// over the bend, strongest where the edge faces the light, fainter where it faces away, faintest
-/// across it, with a small bright spot, a little wider, where the edge faces the light squarely.
+/// across it, with a small bright spot, a little wider, where the edge faces the light squarely;
+/// just inside the gloss, at seven tenths of the band toward the rim, a dark line as deep as half
+/// the edge light.
 const SKSL: &str = r#"
 uniform shader backdrop;
 uniform float2 size;
@@ -55,6 +57,9 @@ half4 main(float2 p) {
     float t4 = t2 * t2;
     float light = edge_light * (t4 * t4 * (0.25 + 1.1 * lit * lit + 0.35 * away * away)
         + 0.8 * t4 * pow(lit, 24.0));
+    // Just inside the gloss, where thick glass turns the light away, a dark line.
+    float dark = (t - 0.7) / 0.11;
+    c.rgb *= half(1.0 - 0.5 * edge_light * exp(-dark * dark));
     c.rgb = min(c.rgb + half3(light) * c.a, c.aaa);
     return c;
 }
@@ -92,4 +97,14 @@ pub fn filter(
             &builder, reach, "backdrop", input, false,
         )
     })
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_lens_compiles() {
+        if let Err(error) = skia_safe::RuntimeEffect::make_for_shader(super::SKSL, None) {
+            panic!("{error}");
+        }
+    }
 }
