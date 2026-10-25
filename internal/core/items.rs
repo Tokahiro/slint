@@ -1929,6 +1929,10 @@ declare_item_vtable! {
 #[pin]
 pub struct BackdropBlur {
     pub blur: Property<LogicalLength>,
+    pub refraction: Property<LogicalLength>,
+    pub bezel: Property<LogicalLength>,
+    pub dispersion: Property<f32>,
+    pub edge_light: Property<f32>,
     pub border_top_left_radius: Property<LogicalLength>,
     pub border_top_right_radius: Property<LogicalLength>,
     pub border_bottom_left_radius: Property<LogicalLength>,

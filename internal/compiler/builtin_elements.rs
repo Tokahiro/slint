@@ -754,6 +754,25 @@ fn build(l: &mut Loader) {
         //! ### backdrop-blur
         //! <SlintProperty propName="backdrop-blur" typeName="length"/>
         //! The standard deviation of the Gaussian blur applied to the backdrop. Zero or negative values disable the blur.
+        //!
+        //! ### backdrop-refraction
+        //! <SlintProperty propName="backdrop-refraction" typeName="length"/>
+        //! How far the rectangle bends the backdrop at its edge, as the rounded edge of thick glass does: at the edge,
+        //! the backdrop from this far inside shows, and the bend eases off to nothing `backdrop-bezel` in from the edge.
+        //! It bends the blurred backdrop, and works with a `backdrop-blur` of zero too. Zero or negative values disable it.
+        //!
+        //! ### backdrop-bezel
+        //! <SlintProperty propName="backdrop-bezel" typeName="length"/>
+        //! How wide the rounded edge is that bends the backdrop, in from the rectangle's edge.
+        //!
+        //! ### backdrop-dispersion
+        //! <SlintProperty propName="backdrop-dispersion" typeName="float"/>
+        //! How much further the edge bends red than green, and blue less, as a share of the bend: a faint colour fringe.
+        //!
+        //! ### backdrop-edge-light
+        //! <SlintProperty propName="backdrop-edge-light" typeName="float"/>
+        //! How strongly the rounded edge brightens toward the rim, most where it faces up, as glass reflects more
+        //! light where it is seen at a slant. Zero disables it.
     } }
 
     element! {
@@ -2329,6 +2348,10 @@ fn build(l: &mut Loader) {
 
     item! { BackdropBlur: Empty {
         in property <length> blur;
+        in property <length> refraction;
+        in property <length> bezel;
+        in property <float> dispersion;
+        in property <float> edge-light;
         in property <length> border-top-left-radius;
         in property <length> border-top-right-radius;
         in property <length> border-bottom-left-radius;

@@ -943,14 +943,33 @@ impl ItemRenderer for SkiaItemRenderer<'_> {
         size: LogicalSize,
     ) {
         let sigma = (backdrop_blur.blur() * self.scale_factor).get();
-        if sigma <= 0. {
-            return;
-        }
-        let bounds = to_skia_rect(&PhysicalRect::from_size(size * self.scale_factor));
+        let refraction = (backdrop_blur.refraction() * self.scale_factor).get();
         // Skia reads the backdrop around the bounds too, see `BackdropBlur::bounding_rect`.
-        let Some(filter) = skia_safe::image_filters::blur((sigma, sigma), None, None, None) else {
+        let blur = if sigma > 0. {
+            skia_safe::image_filters::blur((sigma, sigma), None, None, None)
+        } else {
+            None
+        };
+        let filter = if refraction > 0. {
+            let physical_size = size * self.scale_factor;
+            let radius = backdrop_blur.logical_border_radius() * self.scale_factor;
+            super::lens::filter(
+                blur.clone(),
+                [physical_size.width, physical_size.height],
+                [radius.top_left, radius.top_right, radius.bottom_right, radius.bottom_left],
+                refraction,
+                (backdrop_blur.bezel() * self.scale_factor).get(),
+                backdrop_blur.dispersion(),
+                backdrop_blur.edge_light(),
+            )
+            .or(blur)
+        } else {
+            blur
+        };
+        let Some(filter) = filter else {
             return;
         };
+        let bounds = to_skia_rect(&PhysicalRect::from_size(size * self.scale_factor));
         self.canvas.save();
         self.combine_clip(LogicalRect::from_size(size), backdrop_blur.logical_border_radius());
         let paint = Self::backdrop_layer_paint(self.current_state.alpha);

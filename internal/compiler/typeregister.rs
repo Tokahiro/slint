@@ -313,8 +313,13 @@ pub const RESERVED_INNER_SHADOW_PROPERTIES: &[(&str, Type)] = &[
     ("inner-shadow-color", Type::Color),
 ];
 
-pub const RESERVED_BACKDROP_BLUR_PROPERTIES: &[(&str, Type)] =
-    &[("backdrop-blur", Type::LogicalLength)];
+pub const RESERVED_BACKDROP_BLUR_PROPERTIES: &[(&str, Type)] = &[
+    ("backdrop-blur", Type::LogicalLength),
+    ("backdrop-refraction", Type::LogicalLength),
+    ("backdrop-bezel", Type::LogicalLength),
+    ("backdrop-dispersion", Type::Float32),
+    ("backdrop-edge-light", Type::Float32),
+];
 
 pub const RESERVED_TRANSFORM_PROPERTIES: &[(&str, Type)] = &[
     ("transform-rotation", Type::Angle),
