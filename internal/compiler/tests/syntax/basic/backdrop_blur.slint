@@ -13,4 +13,16 @@ export component Test inherits Window {
     Rectangle {
         backdrop-blur: 4px;
     }
+
+    Image {
+        backdrop-refraction: 12px;
+//                           >   <error{'backdrop-refraction' only works on a 'Rectangle'; set it on a 'Rectangle' behind this element}
+    }
+
+    Rectangle {
+        backdrop-refraction: 12px;
+        backdrop-bezel: 20px;
+        backdrop-dispersion: 0.03;
+        backdrop-edge-light: 0.5;
+    }
 }

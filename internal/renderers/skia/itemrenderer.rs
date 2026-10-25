@@ -950,15 +950,27 @@ impl ItemRenderer for SkiaItemRenderer<'_> {
         } else {
             None
         };
-        let filter = if refraction > 0. {
+        let bezel = (backdrop_blur.bezel() * self.scale_factor).get();
+        let filter = if refraction > 0. && bezel > 0. {
             let physical_size = size * self.scale_factor;
-            let radius = backdrop_blur.logical_border_radius() * self.scale_factor;
+            // The corners as the clip below draws them, where Skia shrinks radii too large for
+            // their sides.
+            let shape = to_skia_rrect(
+                &PhysicalRect::from_size(physical_size),
+                &(backdrop_blur.logical_border_radius() * self.scale_factor),
+            );
+            let corner = |corner| shape.radii(corner).x;
             super::lens::filter(
                 blur.clone(),
                 [physical_size.width, physical_size.height],
-                [radius.top_left, radius.top_right, radius.bottom_right, radius.bottom_left],
+                [
+                    corner(skia_safe::rrect::Corner::UpperLeft),
+                    corner(skia_safe::rrect::Corner::UpperRight),
+                    corner(skia_safe::rrect::Corner::LowerRight),
+                    corner(skia_safe::rrect::Corner::LowerLeft),
+                ],
                 refraction,
-                (backdrop_blur.bezel() * self.scale_factor).get(),
+                bezel,
                 backdrop_blur.dispersion(),
                 backdrop_blur.edge_light(),
             )
