@@ -1,7 +1,7 @@
 // Copyright © SixtyFPS GmbH <info@slint.dev>
 // SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0
 
-//! Pass that lowers synthetic `drop-shadow-*`, `inner-shadow-*`, and `backdrop-blur` properties
+//! Pass that lowers synthetic `drop-shadow-*`, `inner-shadow-*`, and `backdrop-*` properties
 //! to `BoxShadow` and `BackdropBlur` elements.
 // At the moment only shadows on `Rectangle` elements are supported.
 
@@ -201,17 +201,29 @@ fn inject_shadow_element_in_repeated_element(
     );
 }
 
+/// The `backdrop-*` properties of a `Rectangle`, each with the `BackdropBlur` property it sets.
+const BACKDROP_PROPERTIES: [(&str, &str); 5] = [
+    ("backdrop-blur", "blur"),
+    ("backdrop-refraction", "refraction"),
+    ("backdrop-bezel", "bezel"),
+    ("backdrop-dispersion", "dispersion"),
+    ("backdrop-edge-light", "edge-light"),
+];
+
+// A BackdropBlur element holding the `backdrop-*` bindings taken from `sibling_element`, or none
+// where it has none.
 fn create_backdrop_blur_element(
-    binding: BindingExpression,
+    bindings: Vec<(&'static str, BindingExpression)>,
     sibling_element: &ElementRc,
     type_register: &TypeRegister,
     diag: &mut BuildDiagnostics,
 ) -> Option<Element> {
+    let (_, first) = bindings.first()?;
     if matches!(sibling_element.borrow().builtin_type(), Some(b) if b.name != "Rectangle") {
         diag.push_error(
             "'backdrop-blur' only works on a 'Rectangle'; set it on a 'Rectangle' behind this element"
                 .into(),
-            &binding,
+            first,
         );
         return None;
     }
@@ -222,7 +234,9 @@ fn create_backdrop_blur_element(
         enclosing_component: sibling_element.borrow().enclosing_component.clone(),
         ..Default::default()
     };
-    element.set_binding(SmolStr::new_static("blur"), binding);
+    for (property, binding) in bindings {
+        element.set_binding(SmolStr::new_static(property), binding);
+    }
     bind_border_radius(&mut element, sibling_element);
     Some(element)
 }
@@ -240,31 +254,34 @@ fn injected_for(injected: &ElementRc) -> Option<ElementRc> {
     Some(element)
 }
 
-fn is_backdrop_blur_assigned(element: &ElementRc) -> bool {
-    element
-        .borrow()
-        .property_analysis
-        .borrow()
-        .get("backdrop-blur")
-        .is_some_and(|a| a.is_set || a.is_linked)
+fn is_assigned(element: &ElementRc, name: &str) -> bool {
+    element.borrow().property_analysis.borrow().get(name).is_some_and(|a| a.is_set || a.is_linked)
 }
 
 fn has_backdrop_blur(element: &ElementRc) -> bool {
-    element.borrow().binding("backdrop-blur").is_some() || is_backdrop_blur_assigned(element)
+    BACKDROP_PROPERTIES
+        .iter()
+        .any(|(name, _)| element.borrow().binding(name).is_some() || is_assigned(element, name))
 }
 
-fn take_backdrop_blur_binding(element: &ElementRc) -> Option<BindingExpression> {
-    if is_backdrop_blur_assigned(element) {
-        let mut binding = BindingExpression::new_two_way(
-            NamedReference::new(element, SmolStr::new_static("backdrop-blur")).into(),
-        );
-        binding.span = Some(element.borrow().to_source_location());
-        return Some(binding);
-    }
-    let mut element = element.borrow_mut();
-    let binding = element.take_binding("backdrop-blur")?;
-    element.property_declarations.remove("backdrop-blur");
-    Some(binding)
+// Takes each `backdrop-*` binding of `element`, with the `BackdropBlur` property it sets.
+fn take_backdrop_bindings(element: &ElementRc) -> Vec<(&'static str, BindingExpression)> {
+    BACKDROP_PROPERTIES
+        .iter()
+        .filter_map(|(name, property)| {
+            if is_assigned(element, name) {
+                let mut binding = BindingExpression::new_two_way(
+                    NamedReference::new(element, SmolStr::new_static(name)).into(),
+                );
+                binding.span = Some(element.borrow().to_source_location());
+                return Some((*property, binding));
+            }
+            let mut element = element.borrow_mut();
+            let binding = element.take_binding(name)?;
+            element.property_declarations.remove(*name);
+            Some((*property, binding))
+        })
+        .collect()
 }
 
 fn take_shadow_property_bindings(
@@ -306,11 +323,11 @@ pub fn lower_shadow_properties(
             );
         }
     }
-    if let Some(binding) = take_backdrop_blur_binding(&component.root_element) {
+    if let Some((_, binding)) = take_backdrop_bindings(&component.root_element).first() {
         diag.push_warning(
             "'backdrop-blur' has no effect on the root element; set it on a child 'Rectangle'"
                 .into(),
-            &binding,
+            binding,
         );
     }
 
@@ -337,9 +354,12 @@ pub fn lower_shadow_properties(
                 let rect = &component.root_element;
                 let drop = take_shadow_property_bindings(rect, ShadowKind::Drop);
                 let inner = take_shadow_property_bindings(rect, ShadowKind::Inner);
-                let blur = take_backdrop_blur_binding(rect).and_then(|binding| {
-                    create_backdrop_blur_element(binding, rect, type_register, diag)
-                });
+                let blur = create_backdrop_blur_element(
+                    take_backdrop_bindings(rect),
+                    rect,
+                    type_register,
+                    diag,
+                );
                 (drop, inner, blur)
             };
 
@@ -408,10 +428,12 @@ pub fn lower_shadow_properties(
             let drop_shadow_properties = take_shadow_property_bindings(&child, ShadowKind::Drop);
             let inner_shadow_properties = take_shadow_property_bindings(&child, ShadowKind::Inner);
 
-            if let Some(binding) = take_backdrop_blur_binding(&child)
-                && let Some(blur_elem) =
-                    create_backdrop_blur_element(binding, &child, type_register, diag)
-            {
+            if let Some(blur_elem) = create_backdrop_blur_element(
+                take_backdrop_bindings(&child),
+                &child,
+                type_register,
+                diag,
+            ) {
                 push_beneath(elem, &child, blur_elem);
             }
 
