@@ -763,7 +763,8 @@ fn build(l: &mut Loader) {
         //!
         //! ### backdrop-bezel
         //! <SlintProperty propName="backdrop-bezel" typeName="length"/>
-        //! How wide the rounded edge is that bends the backdrop, in from the rectangle's edge.
+        //! How wide the rounded edge is that bends the backdrop, in from the rectangle's edge. Zero or negative values
+        //! disable the bend.
         //!
         //! ### backdrop-dispersion
         //! <SlintProperty propName="backdrop-dispersion" typeName="float"/>
