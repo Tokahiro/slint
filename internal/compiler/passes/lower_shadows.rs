@@ -210,6 +210,14 @@ const BACKDROP_PROPERTIES: [(&str, &str); 5] = [
     ("backdrop-edge-light", "edge-light"),
 ];
 
+// The Rectangle's name of the BackdropBlur's `property`.
+fn backdrop_property_name(property: &str) -> &'static str {
+    BACKDROP_PROPERTIES
+        .iter()
+        .find(|(_, item_property)| *item_property == property)
+        .map_or("backdrop-blur", |(name, _)| name)
+}
+
 // A BackdropBlur element holding the `backdrop-*` bindings taken from `sibling_element`, or none
 // where it has none.
 fn create_backdrop_blur_element(
@@ -218,11 +226,13 @@ fn create_backdrop_blur_element(
     type_register: &TypeRegister,
     diag: &mut BuildDiagnostics,
 ) -> Option<Element> {
-    let (_, first) = bindings.first()?;
+    let (property, first) = bindings.first()?;
     if matches!(sibling_element.borrow().builtin_type(), Some(b) if b.name != "Rectangle") {
         diag.push_error(
-            "'backdrop-blur' only works on a 'Rectangle'; set it on a 'Rectangle' behind this element"
-                .into(),
+            format!(
+                "'{}' only works on a 'Rectangle'; set it on a 'Rectangle' behind this element",
+                backdrop_property_name(property)
+            ),
             first,
         );
         return None;
@@ -323,10 +333,12 @@ pub fn lower_shadow_properties(
             );
         }
     }
-    if let Some((_, binding)) = take_backdrop_bindings(&component.root_element).first() {
+    if let Some((property, binding)) = take_backdrop_bindings(&component.root_element).first() {
         diag.push_warning(
-            "'backdrop-blur' has no effect on the root element; set it on a child 'Rectangle'"
-                .into(),
+            format!(
+                "'{}' has no effect on the root element; set it on a child 'Rectangle'",
+                backdrop_property_name(property)
+            ),
             binding,
         );
     }
