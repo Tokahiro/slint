@@ -9,12 +9,11 @@ use skia_safe::{ImageFilter, RuntimeEffect, runtime_effect::RuntimeShaderBuilder
 /// `p` is in the rectangle's own coordinates, from its top left corner. At `d` in from the edge
 /// the backdrop shows from further inside, along the edge's normal, by a quarter circle's
 /// profile: `refraction` at the edge, nothing at `bezel` in. Red bends `dispersion` more and blue
-/// as much less. The edge light is lit from the top left: it rises toward the rim as the eighth
-/// power of how far toward it a point lies in the band, a thin gloss at the rim rather than a haze
-/// over the bend, strongest where the edge faces the light, fainter where it faces away, faintest
-/// across it, with a small bright spot, a little wider, where the edge faces the light squarely;
-/// just inside the gloss, at seven tenths of the band toward the rim, a dark line as deep as half
-/// the edge light.
+/// as much less. The light comes from the top left and is `edge_light` strong: a sharp glint
+/// along the rim, bright where the edge faces the light and fainter where it faces away (the
+/// two opposite glints of thick glass); just inside the lit rim a dark band, where thick glass
+/// turns the light away; and inside the edge that faces away from the light, a soft bright lip
+/// where the light that passed through the body gathers. The body itself stays clear.
 const SKSL: &str = r#"
 uniform shader backdrop;
 uniform float2 size;
@@ -53,14 +52,14 @@ half4 main(float2 p) {
     }
     float lit = max(dot(n, LIGHT), 0.0);
     float away = max(-dot(n, LIGHT), 0.0);
-    float t2 = t * t;
-    float t4 = t2 * t2;
-    float light = edge_light * (t4 * t4 * (0.25 + 1.1 * lit * lit + 0.35 * away * away)
-        + 0.8 * t4 * pow(lit, 24.0));
-    // Just inside the gloss, where thick glass turns the light away, a dark line.
-    float dark = (t - 0.7) / 0.11;
-    c.rgb *= half(max(1.0 - 0.5 * edge_light * exp(-dark * dark), 0.0));
-    c.rgb = min(c.rgb + half3(light) * c.a, c.aaa);
+    float glint = exp(-d / max(1.2, bezel * 0.05))
+        * (0.22 + 1.3 * lit * lit + 0.75 * away * away * away);
+    float dz = (d - 0.2 * bezel) / (0.12 * bezel);
+    float dark = exp(-dz * dz) * (0.25 + 0.75 * lit);
+    float cz = (d - 0.32 * bezel) / (0.2 * bezel);
+    float lip = 0.32 * exp(-cz * cz) * away * sqrt(away);
+    c.rgb *= half(max(1.0 - 0.45 * edge_light * dark, 0.0));
+    c.rgb = min(c.rgb + half3(edge_light * (glint + lip)) * c.a, c.aaa);
     return c;
 }
 "#;
