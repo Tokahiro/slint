@@ -19,6 +19,8 @@ use crate::SkiaSharedContext;
 
 #[cfg(target_family = "windows")]
 mod dx12;
+#[cfg(feature = "kidou-hdr-spike")]
+mod hdr;
 #[cfg(target_vendor = "apple")]
 mod metal;
 #[cfg(skia_wgpu_vulkan)]
@@ -49,6 +51,8 @@ pub struct WGPUSurface {
     textures_to_transition_for_sampling: RefCell<Vec<wgpu::Texture>>,
     pub(crate) backend: Backend,
     alpha_modes: Vec<wgpu::CompositeAlphaMode>,
+    #[cfg(feature = "kidou-hdr-spike")]
+    hdr: Option<hdr::Hdr>,
 }
 
 /// The alpha mode to composite the surface with: a translucent one when the window is
@@ -115,6 +119,10 @@ impl WGPUSurface {
         // With only `RENDER_ATTACHMENT`, wgpu makes the CAMetalLayer `framebufferOnly`,
         // which breaks Skia reading back the backdrop for backdrop-blur.
         surface_config.usage |= swapchain_capabilities.usages & wgpu::TextureUsages::COPY_SRC;
+        #[cfg(feature = "kidou-hdr-spike")]
+        let hdr = hdr::Hdr::from_env()
+            .filter(|hdr| hdr.choose(&swapchain_capabilities, &mut surface_config));
+
         if let Some(mode) = composite_alpha_mode(transparent, &swapchain_capabilities.alpha_modes) {
             surface_config.alpha_mode = mode;
         }
@@ -132,6 +140,10 @@ impl WGPUSurface {
         }
 
         let backend = Backend::new(adapter, device)?;
+        #[cfg(feature = "kidou-hdr-spike")]
+        if let Some(hdr) = &hdr {
+            hdr.read_white(&surface, adapter, "the window's swap chain");
+        }
 
         let gr_context = backend
             .make_context(adapter, device, queue)
@@ -145,6 +157,8 @@ impl WGPUSurface {
             textures_to_transition_for_sampling: RefCell::new(Vec::new()),
             backend,
             alpha_modes: swapchain_capabilities.alpha_modes,
+            #[cfg(feature = "kidou-hdr-spike")]
+            hdr,
         })
     }
 
@@ -164,6 +178,8 @@ impl WGPUSurface {
             textures_to_transition_for_sampling: RefCell::new(Vec::new()),
             backend,
             alpha_modes: vec![],
+            #[cfg(feature = "kidou-hdr-spike")]
+            hdr: None,
         }
     }
 
@@ -410,6 +426,10 @@ impl crate::Surface for WGPUSurface {
         surface_config.height = height;
 
         surface.configure(&self.wgpu.device, surface_config);
+        #[cfg(feature = "kidou-hdr-spike")]
+        if let Some(hdr) = &self.hdr {
+            hdr.read_white(surface, &self.wgpu.adapter, "a resize");
+        }
         Ok(())
     }
 
@@ -487,6 +507,21 @@ impl crate::Surface for WGPUSurface {
         let mut skia_surface = skia_surface
             .ok_or_else(|| PlatformError::from("Failed to create Skia surface from WGPU"))?;
 
+        #[cfg(feature = "kidou-hdr-spike")]
+        if let Some(hdr) = &self.hdr {
+            if hdr.after_rest() {
+                hdr.read_white(surface, &self.wgpu.adapter, "a frame after a rest");
+            }
+            let (width, height) = (skia_surface.width(), skia_surface.height());
+            let mut layer = hdr
+                .layer(gr_context, width, height)
+                .ok_or_else(|| PlatformError::from("hdr: the 8-bit layer could not be made"))?;
+            callback(layer.canvas(), Some(gr_context), 0)?;
+            hdr.compose(&mut layer, skia_surface.canvas());
+        } else {
+            callback(skia_surface.canvas(), Some(gr_context), 0)?;
+        }
+        #[cfg(not(feature = "kidou-hdr-spike"))]
         callback(skia_surface.canvas(), Some(gr_context), 0)?;
 
         self.backend.release_swapchain_surface(gr_context, &mut skia_surface)?;
@@ -528,6 +563,7 @@ impl crate::Surface for WGPUSurface {
                 | wgpu_30::TextureFormat::Rgba8UnormSrgb
                 | wgpu_30::TextureFormat::Bgra8Unorm
                 | wgpu_30::TextureFormat::Bgra8UnormSrgb => 32,
+                wgpu_30::TextureFormat::Rgba16Float => 64,
                 fmt => return Err(format!("Unsupported surface format {:#?}", fmt).into()),
             })
         } else {

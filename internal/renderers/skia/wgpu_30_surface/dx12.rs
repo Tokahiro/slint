@@ -5,6 +5,7 @@ use windows::Win32::Graphics::Direct3D12::{D3D12_RESOURCE_STATE_PRESENT, ID3D12R
 use windows::Win32::Graphics::Dxgi::Common::DXGI_STANDARD_MULTISAMPLE_QUALITY_PATTERN;
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB,
+    DXGI_FORMAT_R16G16B16A16_FLOAT,
 };
 
 use wgpu_30 as wgpu;
@@ -67,7 +68,16 @@ pub unsafe fn make_dx12_surface(
             wgpu::TextureFormat::Bgra8Unorm => {
                 (DXGI_FORMAT_B8G8R8A8_UNORM, skia_safe::ColorType::BGRA8888)
             }
+            // Kidō's HDR spike (`super::hdr`): linear, with no transfer function of its own.
+            wgpu::TextureFormat::Rgba16Float => {
+                (DXGI_FORMAT_R16G16B16A16_FLOAT, skia_safe::ColorType::RGBAF16)
+            }
             _ => return None,
+        };
+        let color_space = if texture.format() == wgpu::TextureFormat::Rgba16Float {
+            skia_safe::ColorSpace::new_srgb_linear()
+        } else {
+            super::attachment_color_space(texture)
         };
         wrap_dx12_texture(
             size.width as i32,
@@ -76,7 +86,7 @@ pub unsafe fn make_dx12_surface(
             resource,
             dxgi_format,
             color_type,
-            super::attachment_color_space(texture),
+            color_space,
         )
     }
 }
