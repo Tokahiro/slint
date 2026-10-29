@@ -43,6 +43,9 @@ unstable-wgpu-29 = ["i-slint-core/unstable-wgpu-29", "wgpu-29"]
 wgpu-30 = ["i-slint-core/wgpu-30", "dep:wgpu-30", "dep:spin_on", "dep:windows-core", "dep:wgpu-hal-30"]
 unstable-wgpu-30 = ["i-slint-core/unstable-wgpu-30", "wgpu-30"]
 default = ["softbuffer", "wgpu-30"]
+# Kidō's HDR spike (wgpu_30_surface/hdr.rs): a 16-bit scRGB swap chain where the environment
+# asks for it. Only Kidō's builds with the spikes turn it on.
+kidou-hdr-spike = ["wgpu-30", "dep:log"]
 
 [dependencies]
 i-slint-core = { workspace = true, features = ["default", "box-shadow-cache", "shared-parley", "image-decoders", "svg"] }
@@ -65,6 +68,7 @@ unicode-segmentation = { workspace = true }
 wgpu-29 = { workspace = true, optional = true }
 wgpu-30 = { workspace = true, optional = true }
 spin_on = { version = "0.1", optional = true }
+log = { workspace = true, optional = true }
 
 [target.'cfg(any(not(target_vendor = "apple"), target_os = "macos"))'.dependencies]
 glutin = { workspace = true, default-features = false, features = ["egl", "wgl"] }
