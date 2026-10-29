@@ -1,7 +1,7 @@
 // Copyright © SixtyFPS GmbH <info@slint.dev>
 // SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0
 
-//! Kidō's HDR spike (S17 in Tokahiro/kidou-dev's docs/spikes.md), only with the
+//! Kidō's HDR spike (S18 in Tokahiro/kidou-dev's docs/spikes.md), only with the
 //! `kidou-hdr-spike` feature: where the environment variable `KIDOU_SPIKE_HDR` is `scrgb` or
 //! `scrgb-g22`, a window's swap chain is 16-bit float in the extended linear sRGB colour space
 //! (scRGB), where 1.0 is 80 nits. Slint still draws each frame into an 8-bit layer as it draws
