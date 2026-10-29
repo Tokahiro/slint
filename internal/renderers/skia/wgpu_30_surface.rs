@@ -44,6 +44,9 @@ pub(crate) fn sampled_texture_color_space(texture: &wgpu::Texture) -> skia_safe:
 /// Skia rendering surface backed by WGPU. Supports both on-screen rendering (with a
 /// window surface) and offscreen rendering into caller-provided textures.
 pub struct WGPUSurface {
+    // Before `gr_context`, as its layer holds Skia's context: fields drop in this order.
+    #[cfg(feature = "kidou-hdr-spike")]
+    hdr: Option<hdr::Hdr>,
     pub(crate) gr_context: RefCell<skia_safe::gpu::DirectContext>,
     wgpu: Rc<SharedWgpuState>,
     surface_config: RefCell<Option<wgpu::SurfaceConfiguration>>,
@@ -51,8 +54,6 @@ pub struct WGPUSurface {
     textures_to_transition_for_sampling: RefCell<Vec<wgpu::Texture>>,
     pub(crate) backend: Backend,
     alpha_modes: Vec<wgpu::CompositeAlphaMode>,
-    #[cfg(feature = "kidou-hdr-spike")]
-    hdr: Option<hdr::Hdr>,
 }
 
 /// The alpha mode to composite the surface with: a translucent one when the window is
@@ -517,7 +518,7 @@ impl crate::Surface for WGPUSurface {
                 .layer(gr_context, width, height)
                 .ok_or_else(|| PlatformError::from("hdr: the 8-bit layer could not be made"))?;
             callback(layer.canvas(), Some(gr_context), 0)?;
-            hdr.compose(&mut layer, skia_surface.canvas());
+            hdr.compose(&mut layer, skia_surface.canvas())?;
         } else {
             callback(skia_surface.canvas(), Some(gr_context), 0)?;
         }
@@ -563,6 +564,7 @@ impl crate::Surface for WGPUSurface {
                 | wgpu_30::TextureFormat::Rgba8UnormSrgb
                 | wgpu_30::TextureFormat::Bgra8Unorm
                 | wgpu_30::TextureFormat::Bgra8UnormSrgb => 32,
+                #[cfg(feature = "kidou-hdr-spike")]
                 wgpu_30::TextureFormat::Rgba16Float => 64,
                 fmt => return Err(format!("Unsupported surface format {:#?}", fmt).into()),
             })

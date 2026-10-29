@@ -112,7 +112,9 @@ impl Hdr {
         adapter: &wgpu::Adapter,
         why: &str,
     ) {
+        let asked = Instant::now();
         let info = surface.display_hdr_info(adapter);
+        let took = asked.elapsed();
         let hdr = info.coarse.and_then(|coarse| coarse.high_dynamic_range);
         let luminance = info.luminance.unwrap_or_default();
         let white = match (hdr, luminance.sdr_white_nits) {
@@ -123,7 +125,7 @@ impl Hdr {
         self.white.set(white);
         log::info!(
             "hdr: {why}: output HDR {hdr:?}, SDR white {:?} nits, peak {:?} nits, full frame {:?} \
-             nits, scale {white}",
+             nits, scale {white}, read in {took:?}",
             luminance.sdr_white_nits,
             luminance.max_nits,
             luminance.max_full_frame_nits,
@@ -169,8 +171,12 @@ impl Hdr {
     }
 
     /// Draws `layer` decoded and scaled onto `target`, the swap chain's linear surface, and the
-    /// test lines above it.
-    pub(crate) fn compose(&self, layer: &mut skia_safe::Surface, target: &skia_safe::Canvas) {
+    /// test lines above it. Fails where the shader cannot be made, as the frame would show nothing.
+    pub(crate) fn compose(
+        &self,
+        layer: &mut skia_safe::Surface,
+        target: &skia_safe::Canvas,
+    ) -> Result<(), i_slint_core::platform::PlatformError> {
         let image = layer.image_snapshot();
         let white = self.white.get();
         let uniforms = [white, if self.gamma22 { 1. } else { 0. }];
@@ -179,10 +185,7 @@ impl Hdr {
             image.to_raw_shader(None, skia_safe::SamplingOptions::default(), None).and_then(
                 |layer| self.effect.make_shader(Data::new_copy(&bytes), &[layer.into()], None),
             );
-        let Some(shader) = shader else {
-            log::error!("hdr: the decoding shader could not be made");
-            return;
-        };
+        let shader = shader.ok_or("hdr: the decoding shader could not be made")?;
         let mut paint = Paint::default();
         paint.set_shader(shader);
         paint.set_blend_mode(skia_safe::BlendMode::Src);
@@ -199,6 +202,7 @@ impl Hdr {
                 target.draw_rect(Rect::new(right - 160., top, right, top + 4.), &line);
             }
         }
+        Ok(())
     }
 }
 
