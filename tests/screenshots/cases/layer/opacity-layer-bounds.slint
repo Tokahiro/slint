@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-only OR LicenseRef-Slint-Royalty-free-2.0 OR LicenseRef-Slint-Software-3.0
 
 // Faded items whose children draw outside the faded item's own geometry:
-// a drop shadow, a child at a negative position, a rotated child, and a clip with a radius.
+// a drop shadow, a child at a negative position, a rotated child, a clip with a radius,
+// and the miter tip of a stroked path.
 // None of it may be cut off.
 
 //ignore: software, software-embed-assets, anyrender, vello_cpu
@@ -54,8 +55,30 @@ component Card {
 
 export component TestCase inherits Window {
     width: 160px;
-    height: 80px;
+    height: 110px;
     background: #446;
+
+    Rectangle {
+        x: 12px;
+        y: 80px;
+        width: 40px;
+        height: 24px;
+        opacity: 0.6;
+
+        Rectangle {
+            background: teal;
+        }
+
+        Path {
+            x: 8px;
+            y: 2px;
+            width: 24px;
+            height: 20px;
+            commands: "M 0 100 L 50 0 L 100 100 Z";
+            stroke: yellow;
+            stroke-width: 4px;
+        }
+    }
 
     Card {
         x: 12.5px;
