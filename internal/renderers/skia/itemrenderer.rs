@@ -1126,7 +1126,9 @@ impl ItemRenderer for SkiaItemRenderer<'_> {
     ) -> RenderingResult {
         let opacity = opacity_item.opacity();
         if Opacity::need_layer(item_rc, opacity) {
+            let window_adapter = WindowInner::from_pub(self.window).window_adapter();
             let mut layer = skia_safe::canvas::SaveLayerRec::default();
+            let bounds;
             let paint = if opacity_item.wraps_backdrop_blur() {
                 // Skia's backdrop filter only reads the layer it's drawn into.
                 layer = layer.flags(skia_safe::canvas::SaveLayerFlags::INIT_WITH_PREVIOUS);
@@ -1136,11 +1138,25 @@ impl ItemRenderer for SkiaItemRenderer<'_> {
                 paint.set_alpha_f(opacity);
                 paint
             };
+            // Without bounds, Skia allocates a layer the size of the whole surface.
+            if !opacity_item.wraps_backdrop_blur() {
+                // Computed before the walk below, since it updates the repeaters the walk reads.
+                let children_rect = i_slint_core::properties::evaluate_no_tracking(|| {
+                    i_slint_core::item_rendering::item_children_bounding_rect(
+                        item_rc,
+                        &window_adapter,
+                    )
+                }) * self.scale_factor;
+                if children_draw_within_bounds(item_rc) {
+                    // Drop shadow textures and pixel-aligned text and layers reach up to
+                    // a pixel past their unrounded geometry.
+                    bounds = to_skia_rect(&children_rect).with_outset((2., 2.));
+                    layer = layer.bounds(&bounds);
+                }
+            }
             self.canvas.save_layer(&layer.paint(&paint));
             self.state_stack.push(self.current_state);
             self.current_state.alpha = 1.0;
-
-            let window_adapter = WindowInner::from_pub(self.window).window_adapter();
 
             i_slint_core::item_rendering::render_item_children(
                 self,
@@ -1369,6 +1385,32 @@ pub fn from_skia_rect(rect: &skia_safe::Rect) -> PhysicalRect {
     let top_left = euclid::Point2D::new(rect.left, rect.top);
     let bottom_right = euclid::Point2D::new(rect.right, rect.bottom);
     euclid::Box2D::new(top_left, bottom_right).to_rect()
+}
+
+/// Whether every item below `item_rc` draws within its `bounding_rect`.
+/// Text that doesn't clip its overflow and a path that doesn't clip draw past their geometry.
+fn children_draw_within_bounds(item_rc: &ItemRc) -> bool {
+    use i_slint_core::items::{
+        ComplexText, ItemRef, Path, SimpleText, StyledTextItem, TextInput, TextOverflow,
+    };
+    let mut child = item_rc.first_child();
+    while let Some(item) = child {
+        let item_ref = item.borrow();
+        let within = if let Some(text) = ItemRef::downcast_pin::<ComplexText>(item_ref) {
+            text.overflow() == TextOverflow::Clip
+        } else if let Some(path) = ItemRef::downcast_pin::<Path>(item_ref) {
+            path.clip()
+        } else {
+            ItemRef::downcast_pin::<SimpleText>(item_ref).is_none()
+                && ItemRef::downcast_pin::<StyledTextItem>(item_ref).is_none()
+                && ItemRef::downcast_pin::<TextInput>(item_ref).is_none()
+        };
+        if !within || (!item_ref.as_ref().clips_children() && !children_draw_within_bounds(&item)) {
+            return false;
+        }
+        child = item.next_sibling();
+    }
+    true
 }
 
 pub fn to_skia_rect(rect: &PhysicalRect) -> skia_safe::Rect {
