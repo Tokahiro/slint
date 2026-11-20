@@ -56,6 +56,24 @@ pub struct WGPUSurface {
     alpha_modes: Vec<wgpu::CompositeAlphaMode>,
 }
 
+/// With `SLINT_SKIA_CACHE_LOG` set, logs after each frame what Skia's GPU resource cache holds.
+/// Skia keeps textures it no longer uses, such as layers, until the cache reaches its limit.
+fn log_resource_cache(gr_context: &skia_safe::gpu::DirectContext) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if !*ON.get_or_init(|| std::env::var_os("SLINT_SKIA_CACHE_LOG").is_some()) {
+        return;
+    }
+    const MIB: f64 = 1024. * 1024.;
+    let usage = gr_context.resource_cache_usage();
+    i_slint_core::debug_log!(
+        "Skia GPU cache: {:.1} MiB in {} resources, {:.1} MiB of them purgeable, limit {:.0} MiB",
+        usage.resource_bytes as f64 / MIB,
+        usage.resource_count,
+        gr_context.resource_cache_purgeable_bytes() as f64 / MIB,
+        gr_context.resource_cache_limit() as f64 / MIB,
+    );
+}
+
 /// The alpha mode to composite the surface with: a translucent one when the window is
 /// transparent, and `Opaque` when it isn't. Metal (CAMetalLayer) only offers `PostMultiplied`,
 /// so it has to be a fallback. `None` when the surface advertises nothing suitable.
@@ -528,6 +546,7 @@ impl crate::Surface for WGPUSurface {
         self.backend.release_swapchain_surface(gr_context, &mut skia_surface)?;
 
         self.flush_and_submit(gr_context)?;
+        log_resource_cache(gr_context);
 
         // Skia drew via the raw queue behind wgpu's back, and `Queue::present` skips its own
         // transition when the tracker already says PRESENT, so nothing would order the
