@@ -1139,16 +1139,20 @@ impl ItemRenderer for SkiaItemRenderer<'_> {
                 paint
             };
             // Without bounds, Skia allocates a layer the size of the whole surface.
-            if !opacity_item.wraps_backdrop_blur() && children_draw_within_bounds(item_rc) {
-                bounds = to_skia_rect(
-                    &(i_slint_core::properties::evaluate_no_tracking(|| {
-                        i_slint_core::item_rendering::item_children_bounding_rect(
-                            item_rc,
-                            &window_adapter,
-                        )
-                    }) * self.scale_factor),
-                );
-                layer = layer.bounds(&bounds);
+            if !opacity_item.wraps_backdrop_blur() {
+                // Computed before the walk below, since it updates the repeaters the walk reads.
+                let children_rect = i_slint_core::properties::evaluate_no_tracking(|| {
+                    i_slint_core::item_rendering::item_children_bounding_rect(
+                        item_rc,
+                        &window_adapter,
+                    )
+                }) * self.scale_factor;
+                if children_draw_within_bounds(item_rc) {
+                    // Drop shadow textures and pixel-aligned text and layers reach up to
+                    // a pixel past their unrounded geometry.
+                    bounds = to_skia_rect(&children_rect).with_outset((2., 2.));
+                    layer = layer.bounds(&bounds);
+                }
             }
             self.canvas.save_layer(&layer.paint(&paint));
             self.state_stack.push(self.current_state);
