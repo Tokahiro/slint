@@ -1129,6 +1129,7 @@ impl ItemRenderer for SkiaItemRenderer<'_> {
             let window_adapter = WindowInner::from_pub(self.window).window_adapter();
             let mut layer = skia_safe::canvas::SaveLayerRec::default();
             let bounds;
+            let mut bounded = false;
             let paint = if opacity_item.wraps_backdrop_blur() {
                 // Skia's backdrop filter only reads the layer it's drawn into.
                 layer = layer.flags(skia_safe::canvas::SaveLayerFlags::INIT_WITH_PREVIOUS);
@@ -1152,9 +1153,18 @@ impl ItemRenderer for SkiaItemRenderer<'_> {
                     // a pixel past their unrounded geometry.
                     bounds = to_skia_rect(&children_rect).with_outset((2., 2.));
                     layer = layer.bounds(&bounds);
+                    bounded = true;
                 }
             }
             self.canvas.save_layer(&layer.paint(&paint));
+            if std::env::var_os("SLINT_SKIA_LAYER_LOG").is_some() {
+                eprintln!(
+                    "skia-layer: opacity={opacity:.2} bounded={} blur={} device={:?}",
+                    bounded,
+                    opacity_item.wraps_backdrop_blur(),
+                    self.canvas.device_clip_bounds(),
+                );
+            }
             self.state_stack.push(self.current_state);
             self.current_state.alpha = 1.0;
 
