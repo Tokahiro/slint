@@ -759,7 +759,7 @@ impl SkiaRenderer {
         let window_adapter = self.window_adapter()?;
         let window = window_adapter.window();
 
-        surface.render(
+        let outcome = surface.render(
             window,
             surface_size,
             &|skia_canvas, gr_context, back_buffer_age| {
@@ -775,7 +775,9 @@ impl SkiaRenderer {
                 )
             },
             &self.pre_present_callback,
-        )
+        )?;
+        surface.purge_scratch_resources(!window.has_active_animations());
+        Ok(outcome)
     }
 
     fn render_to_canvas(
@@ -1252,6 +1254,21 @@ pub trait Surface {
 
     /// Drops the GPU resources Skia caches, such as glyph atlases and uploaded images.
     fn free_gpu_resources(&self) {}
+
+    /// Frees the scratch textures, such as layers, that the last frames left in Skia's cache.
+    /// With `idle`, it frees all of them; otherwise only those unused for a second.
+    fn purge_scratch_resources(&self, _idle: bool) {}
+}
+
+/// Skia keeps the texture of each layer for reuse until its cache budget runs out.
+/// The device allocator then holds a whole memory block for them while the window rests.
+fn purge_scratch_resources(gr_context: &mut skia_safe::gpu::DirectContext, idle: bool) {
+    let scratch = skia_safe::gpu::PurgeResourceOptions::ScratchResourcesOnly;
+    if idle {
+        gr_context.purge_unlocked_resources(scratch);
+    } else {
+        gr_context.perform_deferred_cleanup(core::time::Duration::from_secs(1), scratch);
+    }
 }
 
 pub trait SkiaRendererExt {

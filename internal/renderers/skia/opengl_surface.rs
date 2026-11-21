@@ -221,6 +221,12 @@ impl super::Surface for OpenGLSurface {
             self.gr_context.borrow_mut().free_gpu_resources();
         }
     }
+
+    fn purge_scratch_resources(&self, idle: bool) {
+        if self.ensure_context_current().is_ok() {
+            crate::purge_scratch_resources(&mut self.gr_context.borrow_mut(), idle);
+        }
+    }
 }
 
 impl OpenGLSurface {
