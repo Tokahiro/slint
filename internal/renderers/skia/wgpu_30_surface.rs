@@ -529,6 +529,26 @@ impl crate::Surface for WGPUSurface {
 
         self.flush_and_submit(gr_context)?;
 
+        // Measurement only: SLINT_SKIA_PURGE=1 drops unlocked scratch textures after each frame,
+        // SLINT_SKIA_CACHE_LOG=1 prints the resource cache size when it changes.
+        if std::env::var_os("SLINT_SKIA_PURGE").is_some() {
+            gr_context.purge_unlocked_resources(
+                skia_safe::gpu::PurgeResourceOptions::ScratchResourcesOnly,
+            );
+        }
+        if std::env::var_os("SLINT_SKIA_CACHE_LOG").is_some() {
+            thread_local!(static LAST: std::cell::Cell<usize> = const { std::cell::Cell::new(0) });
+            let usage = gr_context.resource_cache_usage();
+            if LAST.with(|l| l.replace(usage.resource_bytes)) != usage.resource_bytes {
+                eprintln!(
+                    "skia-cache: count={} bytes={} purgeable={}",
+                    usage.resource_count,
+                    usage.resource_bytes,
+                    gr_context.resource_cache_purgeable_bytes()
+                );
+            }
+        }
+
         // Skia drew via the raw queue behind wgpu's back, and `Queue::present` skips its own
         // transition when the tracker already says PRESENT, so nothing would order the
         // presentation after Skia's work: the clear submission above signals its semaphore
