@@ -449,7 +449,8 @@ pub struct SkiaRenderer {
     text_layout_cache: sharedparley::TextLayoutCache,
     rendering_metrics_collector: RefCell<Option<Rc<RenderingMetricsCollector>>>,
     rendering_first_time: Cell<bool>,
-    animated_last_frame: Cell<bool>,
+    rest_timer: i_slint_core::timers::Timer,
+    purge_at_rest: Rc<Cell<bool>>,
     surface: RefCell<Option<Box<dyn Surface>>>,
     surface_factory: SurfaceFactoryFn,
     pre_present_callback: RefCell<Option<Box<dyn FnMut()>>>,
@@ -500,7 +501,8 @@ impl SkiaRenderer {
             text_layout_cache: Default::default(),
             rendering_metrics_collector: Default::default(),
             rendering_first_time: Default::default(),
-            animated_last_frame: Default::default(),
+            rest_timer: Default::default(),
+            purge_at_rest: Default::default(),
             surface: Default::default(),
             surface_factory,
             pre_present_callback: Default::default(),
@@ -778,9 +780,23 @@ impl SkiaRenderer {
             },
             &self.pre_present_callback,
         )?;
-        let animating = window.has_active_animations();
-        let came_to_rest = self.animated_last_frame.replace(animating) && !animating;
-        surface.purge_scratch_resources(came_to_rest);
+        if self.purge_at_rest.take() {
+            surface.purge_scratch_resources(true);
+        } else {
+            surface.purge_scratch_resources(false);
+            let purge_at_rest = self.purge_at_rest.clone();
+            let window_adapter = Rc::downgrade(&window_adapter);
+            self.rest_timer.start(
+                i_slint_core::timers::TimerMode::SingleShot,
+                core::time::Duration::from_secs(1),
+                move || {
+                    if let Some(window_adapter) = window_adapter.upgrade() {
+                        purge_at_rest.set(true);
+                        window_adapter.window().request_redraw();
+                    }
+                },
+            );
+        }
         Ok(outcome)
     }
 
