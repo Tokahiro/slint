@@ -1,0 +1,43 @@
+name: No Claude lines
+
+# Fails a pull request whose title, description, branch name or own commit messages name
+# Claude. Files are not checked, so CLAUDE.md and .claude/ stay as they are, and their names
+# may appear in the text. A pull request about Claude itself can carry the label about-claude;
+# tool attribution and session lines fail even then. No branch filter: it runs on pull requests
+# into any branch of this fork, the kidou/slint-* branches among them. A new kidou/slint-*
+# branch needs this file cherry-picked, since a pull request runs the workflows of its merge.
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Title, description, branch and commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+          BRANCH: ${{ github.event.pull_request.head.ref }}
+          ABOUT_CLAUDE: ${{ contains(github.event.pull_request.labels.*.name, 'about-claude') }}
+        run: |
+          commits=$(gh api "repos/$REPO/pulls/$PR/commits" --paginate --jq '.[].commit.message')
+          all=$(printf '%s\n%s\n%s\n%s\n' "$TITLE" "$BODY" "$BRANCH" "$commits")
+          hard='co-authored-by: *claude|generated (by|with) \[?claude|claude\.ai/|claude-session:|anthropic\.com>|^claude/'
+          bad=$(printf '%s\n' "$all" | grep -inE "$hard" || true)
+          if [ "$ABOUT_CLAUDE" != "true" ]; then
+            soft=$(printf '%s\n' "$all" | sed -E 's#CLAUDE\.md|\.claude/##g' | grep -in 'claude' || true)
+            bad=$(printf '%s\n%s\n' "$bad" "$soft" | sort -u | sed '/^$/d')
+          fi
+          if [ -n "$bad" ]; then
+            printf 'Remove these lines from the title, description, branch name or commit messages:\n%s\n' "$bad"
+            exit 1
+          fi
