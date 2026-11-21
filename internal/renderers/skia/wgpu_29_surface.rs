@@ -598,8 +598,8 @@ impl crate::Surface for WGPUSurface {
         self.gr_context.borrow_mut().free_gpu_resources();
     }
 
-    fn purge_scratch_resources(&self, idle: bool) {
-        crate::purge_scratch_resources(&mut self.gr_context.borrow_mut(), idle);
+    fn purge_scratch_resources(&self, all: bool) {
+        crate::purge_scratch_resources(&mut self.gr_context.borrow_mut(), all);
     }
 }
 

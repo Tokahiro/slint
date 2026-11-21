@@ -222,9 +222,9 @@ impl super::Surface for OpenGLSurface {
         }
     }
 
-    fn purge_scratch_resources(&self, idle: bool) {
+    fn purge_scratch_resources(&self, all: bool) {
         if self.ensure_context_current().is_ok() {
-            crate::purge_scratch_resources(&mut self.gr_context.borrow_mut(), idle);
+            crate::purge_scratch_resources(&mut self.gr_context.borrow_mut(), all);
         }
     }
 }

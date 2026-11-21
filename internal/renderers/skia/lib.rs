@@ -449,6 +449,7 @@ pub struct SkiaRenderer {
     text_layout_cache: sharedparley::TextLayoutCache,
     rendering_metrics_collector: RefCell<Option<Rc<RenderingMetricsCollector>>>,
     rendering_first_time: Cell<bool>,
+    animated_last_frame: Cell<bool>,
     surface: RefCell<Option<Box<dyn Surface>>>,
     surface_factory: SurfaceFactoryFn,
     pre_present_callback: RefCell<Option<Box<dyn FnMut()>>>,
@@ -499,6 +500,7 @@ impl SkiaRenderer {
             text_layout_cache: Default::default(),
             rendering_metrics_collector: Default::default(),
             rendering_first_time: Default::default(),
+            animated_last_frame: Default::default(),
             surface: Default::default(),
             surface_factory,
             pre_present_callback: Default::default(),
@@ -776,7 +778,9 @@ impl SkiaRenderer {
             },
             &self.pre_present_callback,
         )?;
-        surface.purge_scratch_resources(!window.has_active_animations());
+        let animating = window.has_active_animations();
+        let came_to_rest = self.animated_last_frame.replace(animating) && !animating;
+        surface.purge_scratch_resources(came_to_rest);
         Ok(outcome)
     }
 
@@ -1255,16 +1259,16 @@ pub trait Surface {
     /// Drops the GPU resources Skia caches, such as glyph atlases and uploaded images.
     fn free_gpu_resources(&self) {}
 
-    /// Frees the scratch textures, such as layers, that the last frames left in Skia's cache.
-    /// With `idle`, it frees all of them; otherwise only those unused for a second.
-    fn purge_scratch_resources(&self, _idle: bool) {}
+    /// Frees the unlocked scratch textures, such as layers, that past frames left in Skia's cache.
+    /// With `all`, it frees every one of them; otherwise only those unused for a second.
+    fn purge_scratch_resources(&self, _all: bool) {}
 }
 
 /// Skia keeps the texture of each layer for reuse until its cache budget runs out.
 /// The device allocator then holds a whole memory block for them while the window rests.
-fn purge_scratch_resources(gr_context: &mut skia_safe::gpu::DirectContext, idle: bool) {
+fn purge_scratch_resources(gr_context: &mut skia_safe::gpu::DirectContext, all: bool) {
     let scratch = skia_safe::gpu::PurgeResourceOptions::ScratchResourcesOnly;
-    if idle {
+    if all {
         gr_context.purge_unlocked_resources(scratch);
     } else {
         gr_context.perform_deferred_cleanup(core::time::Duration::from_secs(1), scratch);
