@@ -1,14 +1,20 @@
 name: No Claude lines
 
-# Fails a pull request whose title, description, branch name or own commit messages name
-# Claude. Files are not checked, so CLAUDE.md and .claude/ stay as they are, and their names
-# may appear in the text. A pull request about Claude itself can carry the label about-claude;
-# tool attribution and session lines fail even then. No branch filter: it runs on pull requests
-# into any branch of this fork, the kidou/slint-* branches among them. A new kidou/slint-*
-# branch needs this file cherry-picked, since a pull request runs the workflows of its merge.
+# Fails a pull request whose title, description, branch name, own commit messages or commit
+# authors name Claude. Files are not checked, so CLAUDE.md and .claude/ stay as they are, and
+# their names may appear in the text. A pull request about Claude itself can carry the label
+# about-claude; tool attribution and session lines fail even then. Upstream commits keep their
+# own attribution: a pull request that brings them carries the label upstream-commits, which
+# skips the commits. No branch filter: it runs on pull requests into any branch of this fork,
+# the kidou/slint-* branches among them. A new kidou/slint-* branch needs this file
+# cherry-picked, since a pull request runs the workflows of its merge.
 on:
   pull_request:
     types: [opened, edited, reopened, synchronize, labeled, unlabeled]
+
+concurrency:
+  group: no-claude-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -28,13 +34,16 @@ jobs:
           BODY: ${{ github.event.pull_request.body }}
           BRANCH: ${{ github.event.pull_request.head.ref }}
           ABOUT_CLAUDE: ${{ contains(github.event.pull_request.labels.*.name, 'about-claude') }}
+          UPSTREAM: ${{ contains(github.event.pull_request.labels.*.name, 'upstream-commits') }}
         run: |
-          commits=$(gh api "repos/$REPO/pulls/$PR/commits" --paginate --jq '.[].commit.message')
+          commits=
+          [ "$UPSTREAM" = "true" ] || commits=$(gh api "repos/$REPO/pulls/$PR/commits" --paginate \
+            --jq '.[].commit | .message, "\(.author.name) <\(.author.email)>", "\(.committer.name) <\(.committer.email)>"')
           all=$(printf '%s\n%s\n%s\n%s\n' "$TITLE" "$BODY" "$BRANCH" "$commits")
-          hard='co-authored-by: *claude|generated (by|with) \[?claude|claude\.ai/|claude-session:|anthropic\.com>|^claude/'
+          hard='co-authored-by:[[:space:]]*claude|generated (by|with) \[?claude|claude\.(ai|com)/|claude-session:|anthropic\.com>|^claude/'
           bad=$(printf '%s\n' "$all" | grep -inE "$hard" || true)
           if [ "$ABOUT_CLAUDE" != "true" ]; then
-            soft=$(printf '%s\n' "$all" | sed -E 's#CLAUDE\.md|\.claude/##g' | grep -in 'claude' || true)
+            soft=$(printf '%s\n' "$all" | sed -E 's#claude\.md|\.claude/##gI' | grep -in 'claude' || true)
             bad=$(printf '%s\n%s\n' "$bad" "$soft" | sort -u | sed '/^$/d')
           fi
           if [ -n "$bad" ]; then
